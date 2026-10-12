@@ -1,1 +1,26 @@
 
+import pyautogui
+import time
+
+print("=== AUTO TYPER ===")
+print("Paste your text below.")
+print("When finished, type END on a new line and press Enter.")
+
+lines = []
+
+while True:
+    line = input()
+    if line == "END":
+        break
+    lines.append(line)
+
+text = "\n".join(lines)
+
+speed = float(input("Delay between characters in seconds (e.g. 0.05): "))
+
+print("You have 5 seconds to click your target text box...")
+time.sleep(5)
+
+pyautogui.write(text, interval=speed)
+
+print("Finished typing!")
