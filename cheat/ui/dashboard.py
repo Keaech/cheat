@@ -1,6 +1,5 @@
 import queue
 import threading
-import time
 import tkinter as tk
 from tkinter import messagebox, scrolledtext, ttk
 
@@ -15,8 +14,8 @@ class BentoDashboard:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("Text Entry Assistant")
-        self.root.geometry("820x560")
-        self.root.minsize(620, 420)
+        self.root.geometry("860x600")
+        self.root.minsize(640, 450)
         self.root.configure(bg="#0f0f0f")
 
         self.engine = TypingEngine()
@@ -34,7 +33,6 @@ class BentoDashboard:
     def _build_ui(self) -> None:
         style = ttk.Style()
         style.theme_use("clam")
-        style.configure("TFrame", background="#0f0f0f")
         style.configure("TLabel", background="#1a1a1a", foreground="#dddddd", font=("Segoe UI", 10))
 
         container = tk.Frame(self.root, bg="#0f0f0f", padx=18, pady=18)
@@ -63,10 +61,18 @@ class BentoDashboard:
 
         controls = tk.Frame(container, bg="#0f0f0f", pady=12)
         controls.grid(row=2, column=0, sticky="ew")
-        tk.Label(controls, text="Speed (words/minute):", bg="#0f0f0f", fg="#dddddd").pack(side="left")
+
+        tk.Label(controls, text="Speed (words/minute):", bg="#0f0f0f", fg="#dddddd").grid(row=0, column=0, sticky="w")
         self.wpm_var = tk.StringVar(value="60")
-        self.wpm_entry = ttk.Entry(controls, textvariable=self.wpm_var, width=8)
-        self.wpm_entry.pack(side="left", padx=(8, 16))
+        ttk.Entry(controls, textvariable=self.wpm_var, width=8).grid(row=0, column=1, padx=(8, 18), sticky="w")
+
+        tk.Label(controls, text="Pause after sentences (seconds):", bg="#0f0f0f", fg="#dddddd").grid(row=0, column=2, sticky="w")
+        self.sentence_pause_var = tk.StringVar(value="0.8")
+        ttk.Entry(controls, textvariable=self.sentence_pause_var, width=7).grid(row=0, column=3, padx=(8, 18), sticky="w")
+
+        tk.Label(controls, text="Pause between paragraphs (seconds):", bg="#0f0f0f", fg="#dddddd").grid(row=1, column=0, columnspan=2, sticky="w", pady=(10, 0))
+        self.paragraph_pause_var = tk.StringVar(value="1.5")
+        ttk.Entry(controls, textvariable=self.paragraph_pause_var, width=7).grid(row=1, column=2, sticky="w", pady=(10, 0))
 
         self.start_btn = tk.Button(
             controls,
@@ -79,7 +85,8 @@ class BentoDashboard:
             padx=18,
             pady=8,
         )
-        self.start_btn.pack(side="left")
+        self.start_btn.grid(row=1, column=3, sticky="e", pady=(10, 0))
+        controls.columnconfigure(4, weight=1)
 
         self.status_var = tk.StringVar(value="Ready — focus your intended text field before starting.")
         tk.Label(
@@ -88,7 +95,7 @@ class BentoDashboard:
             bg="#0f0f0f",
             fg="#bdbdbd",
             anchor="w",
-            wraplength=760,
+            wraplength=800,
         ).grid(row=3, column=0, sticky="ew", pady=(4, 0))
         tk.Label(
             container,
@@ -96,7 +103,7 @@ class BentoDashboard:
             bg="#0f0f0f",
             fg="#ffcc80",
             anchor="w",
-            wraplength=760,
+            wraplength=800,
         ).grid(row=4, column=0, sticky="ew", pady=(6, 0))
 
     def _on_global_key(self, key: keyboard.Key | keyboard.KeyCode) -> None:
@@ -116,23 +123,41 @@ class BentoDashboard:
         if not text:
             messagebox.showwarning("Text required", "Enter text before starting.")
             return
+
         try:
             wpm = float(self.wpm_var.get())
+            sentence_pause = float(self.sentence_pause_var.get())
+            paragraph_pause = float(self.paragraph_pause_var.get())
             if not 1 <= wpm <= 600:
-                raise ValueError
-        except ValueError:
-            messagebox.showerror("Invalid speed", "Enter a speed from 1 to 600 words per minute.")
+                raise ValueError("Speed must be between 1 and 600 WPM.")
+            if not 0 <= sentence_pause <= 30 or not 0 <= paragraph_pause <= 60:
+                raise ValueError("Sentence pause must be 0–30 seconds and paragraph pause 0–60 seconds.")
+        except ValueError as exc:
+            messagebox.showerror(
+                "Invalid settings",
+                str(exc) if str(exc) else "Enter valid numbers for speed and pauses.",
+            )
             return
 
-        # Standard typing-speed convention: one word is five characters.
         delay = 60.0 / (wpm * 5)
         self.stop_event.clear()
         self.start_btn.config(text="STOP", state="normal", bg="#c62828")
         self.status_var.set("Switch to your intended text field. Typing starts in 3 seconds…")
-        self.worker = threading.Thread(target=self._typing_worker, args=(text, delay), daemon=True)
+        self.worker = threading.Thread(
+            target=self._typing_worker,
+            args=(text, delay, sentence_pause, paragraph_pause),
+            daemon=True,
+        )
         self.worker.start()
 
-    def _typing_worker(self, text: str, delay: float) -> None:
+    def _typing_worker(
+        self,
+        text: str,
+        delay: float,
+        sentence_pause: float,
+        paragraph_pause: float,
+    ) -> None:
+        failure: str | None = None
         try:
             for remaining in range(3, 0, -1):
                 if self.stop_event.is_set():
@@ -143,18 +168,26 @@ class BentoDashboard:
 
             if not self.stop_event.is_set():
                 self.status_queue.put(("status", "Typing — press Esc or Stop to cancel."))
-                for index, char in enumerate(text, start=1):
+                for index, char in enumerate(text):
                     if self.stop_event.is_set():
                         break
                     self.engine.type_character(char)
-                    if index % 100 == 0:
-                        self.status_queue.put(("status", f"Typed {index} of {len(text)} characters…"))
-                    if self.stop_event.wait(self.pacer.get_delay(delay, char)):
+                    if (index + 1) % 100 == 0:
+                        self.status_queue.put(("status", f"Typed {index + 1} of {len(text)} characters…"))
+
+                    wait_time = self.pacer.get_delay(delay, char)
+                    wait_time += self.pacer.get_pause_after(text, index, sentence_pause, paragraph_pause)
+                    if self.stop_event.wait(wait_time):
                         break
         except Exception as exc:
-            self.status_queue.put(("error", str(exc)))
+            failure = str(exc)
         finally:
-            outcome = "Cancelled." if self.stop_event.is_set() else "Complete."
+            if failure:
+                outcome = f"Error: {failure}"
+            elif self.stop_event.is_set():
+                outcome = "Cancelled."
+            else:
+                outcome = "Complete."
             self.status_queue.put(("done", outcome))
 
     def _poll_status(self) -> None:
@@ -163,8 +196,6 @@ class BentoDashboard:
                 kind, message = self.status_queue.get_nowait()
                 if kind == "status":
                     self.status_var.set(message)
-                elif kind == "error":
-                    self.status_var.set(f"Error: {message}")
                 elif kind == "done":
                     self.status_var.set(message)
                     self.start_btn.config(text="START", state="normal", bg="#3d5afe")

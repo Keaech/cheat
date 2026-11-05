@@ -1,6 +1,6 @@
 # Text Entry Assistant
 
-A small Windows desktop utility for entering text into a window you select and focus yourself. It uses a fixed, user-selected typing speed and includes a countdown and cancellation controls. It does not add simulated typos or random timing intended to make automation look like a person.
+A small Windows desktop utility for entering text into a window you select and focus yourself. It uses a fixed, user-selected typing speed, configurable sentence and paragraph pauses, a countdown, and cancellation controls. Pauses are deterministic; the app does not add simulated typos or random timing to disguise automation.
 
 ## Intended use and limitations
 
@@ -22,7 +22,7 @@ cd cheat
 python main.py
 ```
 
-Enter text, set a speed from 1 to 600 WPM, focus the intended text field, and click **Start**. The app waits three seconds before entering text. Escape or the Stop button requests cancellation.
+Enter text, set a speed from 1 to 600 WPM, choose sentence and paragraph pauses, focus the intended text field, and click **Start**. The app waits three seconds before entering text. Press Escape or click **Stop** to request cancellation.
 
 ## Development
 
@@ -32,4 +32,4 @@ Run the unit tests from the repository root:
 python -m unittest discover -s tests -v
 ```
 
-The pacing helper is deterministic and can be tested without sending keystrokes. Keep tests for UI-independent logic separate from tests that would interact with real windows.
+The pacing helper is deterministic and can be tested without sending keystrokes. Keep tests for UI-independent logic separate from tests that interact with real windows.
