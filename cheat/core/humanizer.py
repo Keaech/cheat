@@ -1,26 +1,25 @@
-import random
-import time
+"""Deterministic pacing helpers for transparent, user-directed typing.
+
+This intentionally does not imitate human behavior, add typos, or vary timing to
+conceal automation. The caller chooses a fixed speed and can stop typing at any
+time.
+"""
+
+import math
+
 
 class Humanizer:
-    """Algorithms to make robotic typing feel human."""
+    """Backward-compatible name for the app's predictable pacing helper."""
 
     @staticmethod
-    def get_delay(base_delay: float) -> float:
-        # Add natural jitter (70% to 130% of base delay)
-        jitter = random.uniform(0.7, 1.3)
-        delay = base_delay * jitter
+    def get_delay(base_delay: float, char: str | None = None) -> float:
+        """Return a validated, fixed inter-character delay in seconds.
 
-        # Simulate "thinking" pauses (small chance of a longer break)
-        if random.random() < 0.03:
-            delay += random.uniform(0.4, 1.2)
-
-        return delay
-
-    @staticmethod
-    def should_make_mistake(char: str, probability: float) -> bool:
-        # Only make mistakes on alphabetic characters
-        return char.isalpha() and random.random() < probability
-
-    @staticmethod
-    def get_random_char() -> str:
-        return random.choice("qwertyuiopasdfghjklzxcvbnm")
+        ``char`` is accepted for compatibility with the earlier UI but does not
+        affect timing. Character-dependent timing would make the automation less
+        predictable and could suggest an attempt to mimic a person.
+        """
+        del char
+        if not math.isfinite(base_delay) or base_delay < 0:
+            raise ValueError("base_delay must be a finite, non-negative number")
+        return base_delay

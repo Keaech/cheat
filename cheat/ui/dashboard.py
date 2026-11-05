@@ -1,160 +1,180 @@
-import tkinter as tk
-from tkinter import ttk, scrolledtext, messagebox
+import queue
 import threading
 import time
+import tkinter as tk
+from tkinter import messagebox, scrolledtext, ttk
+
 from core.engine import TypingEngine
 from core.humanizer import Humanizer
 from pynput import keyboard
 
+
 class BentoDashboard:
-    def __init__(self, root):
+    """Simple Windows UI for user-directed, predictable text entry."""
+
+    def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("Ghost Typer Pro")
-        self.root.geometry("900x600")
+        self.root.title("Text Entry Assistant")
+        self.root.geometry("820x560")
+        self.root.minsize(620, 420)
         self.root.configure(bg="#0f0f0f")
 
         self.engine = TypingEngine()
-        self.humanizer = Humanizer()
-        self.is_typing = False
-        self.stop_requested = False
+        self.pacer = Humanizer()
+        self.stop_event = threading.Event()
+        self.status_queue: queue.Queue[tuple[str, str]] = queue.Queue()
+        self.worker: threading.Thread | None = None
 
-        self.setup_styles()
-        self.build_bento_grid()
-        self.setup_panic_button()
+        self._build_ui()
+        self.listener = keyboard.Listener(on_press=self._on_global_key)
+        self.listener.start()
+        self.root.protocol("WM_DELETE_WINDOW", self.close)
+        self.root.after(100, self._poll_status)
 
-    def setup_styles(self):
-        self.style = ttk.Style()
-        self.style.theme_use('clam')
+    def _build_ui(self) -> None:
+        style = ttk.Style()
+        style.theme_use("clam")
+        style.configure("TFrame", background="#0f0f0f")
+        style.configure("TLabel", background="#1a1a1a", foreground="#dddddd", font=("Segoe UI", 10))
 
-        # Base styles
-        self.style.configure("TFrame", background="#0f0f0f")
-        self.style.configure("Bento.TFrame", background="#1a1a1a", relief="flat")
-        self.style.configure("TLabel", background="#1a1a1a", foreground="#aaaaaa", font=("Segoe UI", 10))
-        self.style.configure("Header.TLabel", background="#1a1a1a", foreground="#ffffff", font=("Segoe UI", 14, "bold"))
-        self.style.configure("Accent.TButton", background="#3d5afe", foreground="white", font=("Segoe UI", 11, "bold"))
+        container = tk.Frame(self.root, bg="#0f0f0f", padx=18, pady=18)
+        container.pack(expand=True, fill="both")
+        container.rowconfigure(1, weight=1)
+        container.columnconfigure(0, weight=1)
 
-    def create_bento_card(self, parent, title, row, col, rowspan=1, colspan=1):
-        card = tk.Frame(parent, bg="#1a1a1a", padx=15, pady=15, highlightbackground="#333333", highlightthickness=1)
-        card.grid(row=row, column=col, rowspan=rowspan, colspan=colspan, sticky="nsew", padx=10, pady=10)
+        tk.Label(
+            container,
+            text="TEXT ENTRY ASSISTANT",
+            bg="#0f0f0f",
+            fg="white",
+            font=("Segoe UI", 16, "bold"),
+        ).grid(row=0, column=0, sticky="w", pady=(0, 10))
 
-        header = tk.Label(card, text=title, bg="#1a1a1a", fg="#ffffff", font=("Segoe UI", 12, "bold"))
-        header.pack(anchor="w", pady=(0, 10))
-
-        return card
-
-    def build_bento_grid(self):
-        self.main_container = tk.Frame(self.root, bg="#0f0f0f", padx=20, pady=20)
-        self.main_container.pack(expand=True, fill="both")
-
-        # Configure grid weights for responsiveness
-        for i in range(3): self.main_container.columnconfigure(i, weight=1)
-        for i in range(3): self.main_container.rowconfigure(i, weight=1)
-
-        # Card 1: Text Input (Large - Top Left)
-        self.input_card = self.create_bento_card(self.main_container, "📝 SOURCE TEXT", 0, 0, rowspan=2, colspan=2)
         self.text_area = scrolledtext.ScrolledText(
-            self.input_card, bg="#252525", fg="#ffffff", insertbackground="white",
-            font=("Consolas", 11), borderwidth=0, highlightthickness=0
+            container,
+            bg="#252525",
+            fg="white",
+            insertbackground="white",
+            font=("Consolas", 11),
+            wrap="word",
+            borderwidth=0,
         )
-        self.text_area.pack(expand=True, fill="both")
+        self.text_area.grid(row=1, column=0, sticky="nsew")
 
-        # Card 2: Target Window (Small - Top Right)
-        self.target_card = self.create_bento_card(self.main_container, "🎯 TARGET", 0, 2)
-        self.target_var = tk.StringVar(value="Notepad")
-        self.target_entry = tk.Entry(self.target_card, textvariable=self.target_var, bg="#252525", fg="white", borderwidth=0, font=("Segoe UI", 11))
-        self.target_entry.pack(fill="x", pady=5)
-
-        # Card 3: WPM / Speed (Small - Middle Right)
-        self.speed_card = self.create_bento_card(self.main_container, "⚡ SPEED", 1, 2)
+        controls = tk.Frame(container, bg="#0f0f0f", pady=12)
+        controls.grid(row=2, column=0, sticky="ew")
+        tk.Label(controls, text="Speed (words/minute):", bg="#0f0f0f", fg="#dddddd").pack(side="left")
         self.wpm_var = tk.StringVar(value="60")
-        self.wpm_entry = tk.Entry(self.speed_card, textvariable=self.wpm_var, bg="#252525", fg="white", borderwidth=0, font=("Segoe UI", 11))
-        self.wpm_entry.pack(fill="x", pady=5)
+        self.wpm_entry = ttk.Entry(controls, textvariable=self.wpm_var, width=8)
+        self.wpm_entry.pack(side="left", padx=(8, 16))
 
-        # Card 4: Humanization (Small - Bottom Left)
-        self.human_card = self.create_bento_card(self.main_container, "🧠 HUMANITY", 2, 0)
-        self.mistake_var = tk.StringVar(value="2")
-        self.mistake_entry = tk.Entry(self.human_card, textvariable=self.mistake_var, bg="#252525", fg="white", borderwidth=0, font=("Segoe UI", 11))
-        self.mistake_entry.pack(fill="x", pady=5)
-
-        # Card 5: Status (Small - Bottom Middle)
-        self.status_card = self.create_bento_card(self.main_container, "📊 STATUS", 2, 1)
-        self.status_var = tk.StringVar(value="IDLE")
-        self.status_label = tk.Label(self.status_card, textvariable=self.status_var, bg="#1a1a1a", fg="#00ff00", font=("Segoe UI", 12, "bold"))
-        self.status_label.pack(expand=True)
-
-        # Card 6: Action (Small - Bottom Right)
-        self.action_card = self.create_bento_card(self.main_container, "🕹️ CONTROL", 2, 2)
         self.start_btn = tk.Button(
-            self.action_card, text="START", bg="#3d5afe", fg="white",
-            font=("Segoe UI", 12, "bold"), command=self.start_typing,
-            relief="flat", cursor="hand2"
+            controls,
+            text="START",
+            command=self.start_typing,
+            bg="#3d5afe",
+            fg="white",
+            activebackground="#536dfe",
+            relief="flat",
+            padx=18,
+            pady=8,
         )
-        self.start_btn.pack(expand=True, fill="both")
+        self.start_btn.pack(side="left")
 
-    def setup_panic_button(self):
-        def on_press(key):
-            if key == keyboard.Key.esc:
-                self.stop_requested = True
-                self.status_var.set("🛑 PANIC STOPPED")
+        self.status_var = tk.StringVar(value="Ready — focus your intended text field before starting.")
+        tk.Label(
+            container,
+            textvariable=self.status_var,
+            bg="#0f0f0f",
+            fg="#bdbdbd",
+            anchor="w",
+            wraplength=760,
+        ).grid(row=3, column=0, sticky="ew", pady=(4, 0))
+        tk.Label(
+            container,
+            text="Types into the currently focused window. Press Esc or click Stop to cancel.",
+            bg="#0f0f0f",
+            fg="#ffcc80",
+            anchor="w",
+            wraplength=760,
+        ).grid(row=4, column=0, sticky="ew", pady=(6, 0))
 
-        listener = keyboard.Listener(on_press=on_press)
-        listener.start()
+    def _on_global_key(self, key: keyboard.Key | keyboard.KeyCode) -> None:
+        """The listener thread signals cancellation; it never touches Tk widgets."""
+        if key == keyboard.Key.esc and self.worker and self.worker.is_alive():
+            self.stop_event.set()
+            self.status_queue.put(("status", "Stop requested…"))
 
-    def start_typing(self):
-        if self.is_typing: return
-
-        text = self.text_area.get("1.0", tk.END).strip()
-        if not text:
-            messagebox.showwarning("Error", "Please enter text!")
+    def start_typing(self) -> None:
+        if self.worker and self.worker.is_alive():
+            self.stop_event.set()
+            self.status_var.set("Stop requested…")
+            self.start_btn.config(state="disabled", text="STOPPING…")
             return
 
-        self.stop_requested = False
-        self.is_typing = True
-        self.start_btn.config(text="STOPPING...", bg="#ff5252")
-
-        threading.Thread(target=self.execution_loop, args=(text,), daemon=True).start()
-
-    def execution_loop(self, text):
+        text = self.text_area.get("1.0", "end-1c")
+        if not text:
+            messagebox.showwarning("Text required", "Enter text before starting.")
+            return
         try:
             wpm = float(self.wpm_var.get())
-            base_delay = 60 / (wpm * 6)
-            mistake_prob = float(self.mistake_var.get()) / 100
-            keyword = self.target_var.get()
+            if not 1 <= wpm <= 600:
+                raise ValueError
+        except ValueError:
+            messagebox.showerror("Invalid speed", "Enter a speed from 1 to 600 words per minute.")
+            return
 
-            self.status_var.set(f"🔍 FINDING {keyword}...")
-            if not self.engine.focus_window(keyword):
-                self.status_var.set("⚠️ FOCUS MANUALLY!")
+        # Standard typing-speed convention: one word is five characters.
+        delay = 60.0 / (wpm * 5)
+        self.stop_event.clear()
+        self.start_btn.config(text="STOP", state="normal", bg="#c62828")
+        self.status_var.set("Switch to your intended text field. Typing starts in 3 seconds…")
+        self.worker = threading.Thread(target=self._typing_worker, args=(text, delay), daemon=True)
+        self.worker.start()
 
-            for i in range(5, 0, -1):
-                if self.stop_requested: break
-                self.status_var.set(f"🚀 STARTING IN {i}...")
-                time.sleep(1)
+    def _typing_worker(self, text: str, delay: float) -> None:
+        try:
+            for remaining in range(3, 0, -1):
+                if self.stop_event.is_set():
+                    break
+                self.status_queue.put(("status", f"Typing begins in {remaining} seconds…"))
+                if self.stop_event.wait(1):
+                    break
 
-            self.status_var.set("⌨️ TYPING...")
-            for char in text:
-                if self.stop_requested: break
-
-                delay = self.humanizer.get_delay(base_delay)
-
-                if self.humanizer.should_make_mistake(char, mistake_prob):
-                    self.engine.type_character(self.humanizer.get_random_char())
-                    time.sleep(random.uniform(0.1, 0.3))
-                    self.engine.press_key(0x08)
-                    time.sleep(random.uniform(0.1, 0.3))
-
-                self.engine.type_character(char)
-                time.sleep(delay)
-
-            self.status_var.set("✅ DONE")
-
-        except Exception as e:
-            self.status_var.set(f"❌ ERROR: {str(e)}")
+            if not self.stop_event.is_set():
+                self.status_queue.put(("status", "Typing — press Esc or Stop to cancel."))
+                for index, char in enumerate(text, start=1):
+                    if self.stop_event.is_set():
+                        break
+                    self.engine.type_character(char)
+                    if index % 100 == 0:
+                        self.status_queue.put(("status", f"Typed {index} of {len(text)} characters…"))
+                    if self.stop_event.wait(self.pacer.get_delay(delay, char)):
+                        break
+        except Exception as exc:
+            self.status_queue.put(("error", str(exc)))
         finally:
-            self.is_typing = False
-            self.stop_requested = False
-            self.root.after(0, lambda: self.start_btn.config(text="START", bg="#3d5afe"))
+            outcome = "Cancelled." if self.stop_event.is_set() else "Complete."
+            self.status_queue.put(("done", outcome))
 
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = BentoDashboard(root)
-    root.mainloop()
+    def _poll_status(self) -> None:
+        try:
+            while True:
+                kind, message = self.status_queue.get_nowait()
+                if kind == "status":
+                    self.status_var.set(message)
+                elif kind == "error":
+                    self.status_var.set(f"Error: {message}")
+                elif kind == "done":
+                    self.status_var.set(message)
+                    self.start_btn.config(text="START", state="normal", bg="#3d5afe")
+                    self.worker = None
+        except queue.Empty:
+            pass
+        if self.root.winfo_exists():
+            self.root.after(100, self._poll_status)
+
+    def close(self) -> None:
+        self.stop_event.set()
+        self.listener.stop()
+        self.root.destroy()
