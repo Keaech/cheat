@@ -1,34 +1,36 @@
-import sys
 import os
+import sys
 import tkinter as tk
 
-# --- PATH FIXER ---
-# This ensures that 'core' and 'ui' folders are recognized as packages
-# regardless of how the script is launched.
 project_root = os.path.dirname(os.path.abspath(__file__))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 try:
     from ui.dashboard import BentoDashboard
-except ImportError as e:
-    print(f"\n❌ Import Error: {e}")
-    print("\n💡 This usually happens if pynput is not installed.")
-    print("Try running: pip install pynput")
-    input("\nPress Enter to exit...")
-    sys.exit(1)
+except ImportError as exc:
+    print(f"\nImport error: {exc}")
+    print("Install dependencies with: python -m pip install -r requirements.txt")
+    input("Press Enter to exit...")
+    raise SystemExit(1)
+
 
 def main():
     try:
         root = tk.Tk()
-        # Bootloader logic
         app = BentoDashboard(root)
+        # The dashboard's start handler reads target_var, but its UI did not
+        # create that variable. That exception happened before enabling Stop.
+        # Empty means do not force-focus a named app: the user focuses Word,
+        # Google Docs, or another intended field during the visible countdown.
+        if not hasattr(app, "target_var"):
+            app.target_var = tk.StringVar(master=root, value="")
         root.mainloop()
-    except Exception as e:
-        print(f"\n💥 Fatal Crash: {e}")
+    except Exception:
         import traceback
         traceback.print_exc()
-        input("\nPress Enter to exit...")
+        input("Press Enter to exit...")
+
 
 if __name__ == "__main__":
     main()

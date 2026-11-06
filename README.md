@@ -12,10 +12,10 @@ From the repository root in PowerShell:
 ```powershell
 python -m pip install -r requirements.txt
 python -m unittest discover -s tests -v
-python .\cheat\main.py
+python .\\cheat\\main.py
 ```
 
-The app supports an optional target-window title match (default Notepad), then waits three seconds before typing. Confirm the intended field is focused before start. Press Escape or Stop to cancel. Local autosave and session history are stored under `~/.text_entry_assistant`; the draft contains your input text, so protect or delete that directory if it contains sensitive material.
+The app waits three seconds before typing. During that countdown, focus the intended text field in Word, Google Docs, or another application. It does not force-focus a named window by default, since Windows can refuse that request and browser/document window titles vary. Press Escape or Stop to cancel. Local autosave and session history are stored under `~/.text_entry_assistant`; the draft contains your input text, so protect or delete that directory if it contains sensitive material.
 
 ## Dashboard and shortcuts
 
