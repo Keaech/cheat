@@ -1,37 +1,24 @@
 # Text Entry Assistant
 
-A small Windows desktop utility for entering text into a window you select and focus yourself. It uses a fixed, user-selected typing speed, configurable sentence and paragraph pauses, a countdown, and cancellation controls. Pauses are deterministic; the app does not add simulated typos or random timing to disguise automation.
+A local Windows desktop app for user-directed text entry. It offers configurable typing speed and sentence/paragraph pauses, a live progress dashboard, global keyboard shortcuts, text-file import, local autosave/recovery, and session history. It types into the focused window; use only where you are authorized and automation is permitted.
 
-The interface uses the **Belisio** typeface when it is installed on your computer. Tkinter falls back to a system font if Belisio is unavailable.
+## Requirements and launch
 
-## Intended use and limitations
+- Windows, Python 3.10+, and Tkinter
+- Belisio font is optional; the system font is used if it is unavailable
 
-Use this only where you are authorized to enter the text and where automated input is permitted. It sends keystrokes to the currently focused window; check the target carefully before starting. The optional target-window title can be used to focus a matching window. Press **Esc** or **Stop** to cancel. The application does not guarantee that another application's focus request will succeed.
-
-This is currently a local desktop application, not a SaaS: it has no accounts, server, payments, or cloud storage. Do not enter sensitive information unless you understand the behavior of your operating system and target application.
-
-## Requirements
-
-- Windows (the input engine uses the Windows API)
-- Python 3.10 or later
-- Tkinter, usually included with the standard Windows Python installer
-
-Install the third-party dependency and run:
+From the repository root in PowerShell:
 
 ```powershell
 python -m pip install -r requirements.txt
-cd cheat
-python main.py
-```
-
-Enter text, set a speed from 1 to 600 WPM, choose sentence and paragraph pauses, and optionally enter part of the target window's title (default: Notepad). Focus the intended text field and click **Start**. The app waits three seconds before entering text. Press Escape or click **Stop** to cancel.
-
-## Development
-
-Run the unit tests from the repository root:
-
-```powershell
 python -m unittest discover -s tests -v
+python .\cheat\main.py
 ```
 
-The pacing helper is deterministic and can be tested without sending keystrokes. Keep tests for UI-independent logic separate from tests that interact with real windows.
+The app supports an optional target-window title match (default Notepad), then waits three seconds before typing. Confirm the intended field is focused before start. Press Escape or Stop to cancel. Local autosave and session history are stored under `~/.text_entry_assistant`; the draft contains your input text, so protect or delete that directory if it contains sensitive material.
+
+## Dashboard and shortcuts
+
+The dashboard shows character/word/paragraph counts, progress, words remaining, estimated time, approximate current WPM, and characters typed. Start/pause, stop, and speed changes can be triggered globally. Defaults are Ctrl+Alt+Space (start/pause), Ctrl+Alt+X (stop), Ctrl+Alt+Up (faster), and Ctrl+Alt+Down (slower). Use **Hotkeys** to customize them in pynput format; global shortcut registration can vary by operating system and may conflict with other software.
+
+Import supports UTF-8 text files. Session history and drafts are local only; no text is sent to a service. Recovery records progress periodically, so a sudden shutdown may repeat a small number of recent characters. Verify target focus and cursor position before resuming.
