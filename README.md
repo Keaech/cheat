@@ -1,13 +1,10 @@
 # Text Entry Assistant
 
-A local Windows desktop app for user-directed text entry. It offers configurable typing speed and sentence/paragraph pauses, a live progress dashboard, global keyboard shortcuts, text-file import, local autosave/recovery, and session history. It types into the focused window; use only where you are authorized and automation is permitted.
+A local Windows desktop app for user-directed text entry. It offers configurable typing speed and sentence/paragraph pauses, a live progress dashboard, global keyboard shortcuts, text-file import, local autosave/recovery, and session history.
 
-## Requirements and launch
+## Run
 
-- Windows, Python 3.10+, and Tkinter
-- Belisio font is optional; the system font is used if it is unavailable
-
-From the repository root in PowerShell:
+On Windows with Python 3.10+ and Tkinter installed, from the repository root:
 
 ```powershell
 python -m pip install -r requirements.txt
@@ -15,10 +12,8 @@ python -m unittest discover -s tests -v
 python .\\cheat\\main.py
 ```
 
-The app waits three seconds before typing. During that countdown, focus the intended text field in Word, Google Docs, or another application. It does not force-focus a named window by default, since Windows can refuse that request and browser/document window titles vary. Press Escape or Stop to cancel. Local autosave and session history are stored under `~/.text_entry_assistant`; the draft contains your input text, so protect or delete that directory if it contains sensitive material.
+During the three-second countdown, focus the intended document window (for example Word or Google Docs). The app captures that external foreground window and types only while that same window remains active. Switching to another application pauses typing until you return to the target; Escape stops immediately. Windows exposes browser tabs as one window, so switching tabs within the same browser window cannot always be distinguished from the target document. Keep the document editor focused, or use a browser extension for reliable tab/editor-level focus protection.
 
-## Dashboard and shortcuts
+Pacing is scheduled against monotonic time to reduce drift; the requested WPM is approximate and depends on system scheduling, Unicode handling, and any configured sentence/paragraph pauses. Current throughput includes time spent in those pauses. The dashboard text editor itself is never used as the typing target.
 
-The dashboard shows character/word/paragraph counts, progress, words remaining, estimated time, approximate current WPM, and characters typed. Start/pause, stop, and speed changes can be triggered globally. Defaults are Ctrl+Alt+Space (start/pause), Ctrl+Alt+X (stop), Ctrl+Alt+Up (faster), and Ctrl+Alt+Down (slower). Use **Hotkeys** to customize them in pynput format; global shortcut registration can vary by operating system and may conflict with other software.
-
-Import supports UTF-8 text files. Session history and drafts are local only; no text is sent to a service. Recovery records progress periodically, so a sudden shutdown may repeat a small number of recent characters. Verify target focus and cursor position before resuming.
+Drafts, session recovery, and history are stored locally under `~/.text_entry_assistant`; drafts include your input text. Keep that folder private or delete it if it contains sensitive material.
