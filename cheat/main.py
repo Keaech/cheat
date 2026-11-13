@@ -1,8 +1,7 @@
 import os
 import sys
-import threading
-import time
 import tkinter as tk
+from tkinter import messagebox
 
 project_root = os.path.dirname(os.path.abspath(__file__))
 if project_root not in sys.path:
@@ -19,15 +18,80 @@ except ImportError as exc:
 
 
 class SafeDashboard(BentoDashboard):
-    """Adds accurate pacing and a foreground-window safety guard."""
+    """Adds focus-safe typing and convenient text-editor actions."""
 
     def __init__(self, root: tk.Tk):
-        # The existing dashboard's Start handler expects this setting, although
-        # the current UI does not render a target-window field.
+        # The dashboard's Start handler expects this setting, although the
+        # current UI does not render a target-window field.
         self.target_var = tk.StringVar(master=root, value="")
         super().__init__(root)
+        self._add_text_actions()
         self._esc_listener = keyboard.Listener(on_press=self._on_emergency_key)
         self._esc_listener.start()
+
+    def _add_text_actions(self) -> None:
+        """Add explicit selection and clear controls below the existing editor."""
+        editor = self.text_area.master
+        toolbar = tk.Frame(editor, bg=COLORS["panel"])
+        toolbar.grid(row=2, column=0, columnspan=2, sticky="ew", padx=6, pady=(5, 0))
+
+        tk.Label(
+            toolbar,
+            text="Select text by dragging, or use Shift + arrow keys. Then press Delete/Backspace or use:",
+            bg=COLORS["panel"],
+            fg=COLORS["muted"],
+            font=(FONT_FAMILY, 9),
+        ).pack(side="left", padx=(2, 8))
+        tk.Button(
+            toolbar,
+            text="Delete selection",
+            command=self.delete_selected_text,
+            bg=COLORS["track"],
+            fg=COLORS["cream"],
+            activebackground=COLORS["pink"],
+            relief="flat",
+            padx=9,
+            pady=4,
+            cursor="hand2",
+        ).pack(side="left", padx=3)
+        tk.Button(
+            toolbar,
+            text="Clear all",
+            command=self.clear_all_text,
+            bg=COLORS["danger"],
+            fg=COLORS["cream"],
+            activebackground=COLORS["pink"],
+            relief="flat",
+            padx=9,
+            pady=4,
+            cursor="hand2",
+        ).pack(side="left", padx=3)
+
+    def delete_selected_text(self) -> None:
+        """Delete only the selected text and retain the rest of the draft."""
+        if self.worker and self.worker.is_alive():
+            messagebox.showinfo("Typing in progress", "Stop or pause the typing session before editing the text.")
+            return
+        if not self.text_area.tag_ranges("sel"):
+            messagebox.showinfo("Nothing selected", "Select a section of text first, then choose Delete selection.")
+            return
+        self.text_area.delete("sel.first", "sel.last")
+        self.text_area.focus_set()
+
+    def clear_all_text(self) -> None:
+        """Clear the complete editor after an explicit confirmation."""
+        if self.worker and self.worker.is_alive():
+            messagebox.showinfo("Typing in progress", "Stop or pause the typing session before clearing the text.")
+            return
+        if not self.text_area.get("1.0", "end-1c"):
+            return
+        if not messagebox.askyesno("Clear all text?", "Delete all text in the editor? This cannot be undone after the app closes."):
+            return
+        self.text_area.delete("1.0", "end")
+        self._text = ""
+        self._typed_chars = 0
+        self._recovery_offset = 0
+        self.text_area.focus_set()
 
     def _on_emergency_key(self, key):
         if key == keyboard.Key.esc and self.worker and self.worker.is_alive():
@@ -36,11 +100,7 @@ class SafeDashboard(BentoDashboard):
             self.status_queue.put(("status", "Emergency stop requested (Esc)…"))
 
     def _typing_worker(self, text, offset, wpm, sentence_pause, paragraph_pause, _target=""):
-        """Type only while the intended external window remains foreground.
-
-        Speed uses deadline-based scheduling to limit drift from per-character
-        processing overhead. Changing WPM takes effect on the next character.
-        """
+        """Type at an average WPM cadence, guarded by foreground focus."""
         failure = None
         typed = offset
         active_started = None
@@ -59,7 +119,7 @@ class SafeDashboard(BentoDashboard):
                 if not target_hwnd or self.engine.is_current_process_window(target_hwnd):
                     raise RuntimeError("No external target is focused. Start again and focus the document during the countdown.")
                 title = self.engine.get_window_title(target_hwnd) or "the selected window"
-                self.status_queue.put(("status", f"Typing into {title}. Switch back to this window to pause; Esc stops."))
+                self.status_queue.put(("status", f"Typing into {title}. Switching apps pauses typing; Esc stops."))
                 deadline = time.monotonic()
 
                 for index in range(offset, len(text)):
@@ -91,10 +151,8 @@ class SafeDashboard(BentoDashboard):
 
                     interval = 60.0 / (max(1.0, min(600.0, self._current_wpm)) * 5)
                     deadline = max(deadline + interval, now)
-                    pause = self.pacer.get_pause_after(text, index, sentence_pause, paragraph_pause)
-                    deadline += pause
-                    wait_for = max(0.0, deadline - time.monotonic())
-                    if self.stop_event.wait(wait_for):
+                    deadline += self.pacer.get_pause_after(text, index, sentence_pause, paragraph_pause)
+                    if self.stop_event.wait(max(0.0, deadline - time.monotonic())):
                         break
 
                 if active_started is not None:
