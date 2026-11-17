@@ -34,22 +34,33 @@ class TypingEngine:
     def __init__(self):
         if os.name != "nt":
             raise RuntimeError("The keyboard engine currently requires Windows.")
+
         self.user32 = ctypes.WinDLL("user32", use_last_error=True)
         self.kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+
         self.user32.SendInput.argtypes = (wintypes.UINT, ctypes.POINTER(INPUT), ctypes.c_int)
         self.user32.SendInput.restype = wintypes.UINT
+
         self.user32.GetForegroundWindow.restype = wintypes.HWND
+
         self.user32.GetWindowThreadProcessId.argtypes = (wintypes.HWND, ctypes.POINTER(wintypes.DWORD))
         self.user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+
         self.user32.IsWindowVisible.argtypes = (wintypes.HWND,)
         self.user32.IsWindowVisible.restype = wintypes.BOOL
+
         self.user32.GetWindowTextLengthW.argtypes = (wintypes.HWND,)
         self.user32.GetWindowTextLengthW.restype = ctypes.c_int
+
         self.user32.GetWindowTextW.argtypes = (wintypes.HWND, wintypes.LPWSTR, ctypes.c_int)
         self.user32.GetWindowTextW.restype = ctypes.c_int
+
         self.user32.EnumWindows.argtypes = (ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM), wintypes.LPARAM)
         self.user32.EnumWindows.restype = wintypes.BOOL
+
         self.user32.ShowWindow.argtypes = (wintypes.HWND, ctypes.c_int)
+        self.user32.ShowWindow.restype = wintypes.BOOL
+
         self.user32.SetForegroundWindow.argtypes = (wintypes.HWND,)
         self.user32.SetForegroundWindow.restype = wintypes.BOOL
 
