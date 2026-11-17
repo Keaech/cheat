@@ -2,7 +2,24 @@ import ctypes
 from ctypes import wintypes
 
 SW_SHOW = 5
-user32 = ctypes.windll.user32
+user32 = ctypes.WinDLL("user32", use_last_error=True)
+
+# Declare pointer-sized Windows API signatures explicitly. Without these,
+# ctypes can assume C int arguments/return values and truncate HWND values
+# on 64-bit Windows.
+WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+user32.EnumWindows.argtypes = [WNDENUMPROC, wintypes.LPARAM]
+user32.EnumWindows.restype = wintypes.BOOL
+user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
+user32.GetWindowTextLengthW.restype = ctypes.c_int
+user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+user32.GetWindowTextW.restype = ctypes.c_int
+user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+user32.ShowWindow.restype = wintypes.BOOL
+user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+user32.SetForegroundWindow.restype = wintypes.BOOL
+user32.keybd_event.argtypes = [wintypes.BYTE, wintypes.BYTE, wintypes.DWORD, ctypes.c_size_t]
+user32.keybd_event.restype = None
 
 class TypingEngine:
     """Handles low-level Windows API interactions for input simulation."""
@@ -27,6 +44,7 @@ class TypingEngine:
 
     def focus_window(self, keyword: str) -> bool:
         found_hwnd = []
+
         def callback(hwnd, lParam):
             length = self.user32.GetWindowTextLengthW(hwnd)
             if length > 0:
@@ -37,7 +55,6 @@ class TypingEngine:
                     return False
             return True
 
-        WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
         self.user32.EnumWindows(WNDENUMPROC(callback), 0)
 
         if found_hwnd:
