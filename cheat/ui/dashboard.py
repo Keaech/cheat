@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
 import threading
 import time
+import random
 from core.engine import TypingEngine
 from core.humanizer import Humanizer
 from pynput import keyboard
